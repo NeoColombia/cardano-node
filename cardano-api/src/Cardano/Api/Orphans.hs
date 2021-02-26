@@ -22,7 +22,9 @@ import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 
 import qualified Cardano.Crypto.Hash.Class as Crypto
+import qualified Cardano.Ledger.SafeHash as SafeHash
 import qualified Cardano.Ledger.Core as Core
+import qualified Cardano.Ledger.Shelley.Constraints as Shelley
 import qualified Cardano.Ledger.Crypto as Crypto
 import qualified Cardano.Ledger.Mary.Value as Mary
 import           Cardano.Slotting.Slot (SlotNo (..))
@@ -68,6 +70,8 @@ instance ToJSON Shelley.AccountState where
 
 instance ( Consensus.ShelleyBasedEra era
          , ToJSON (Core.TxOut era)
+         , ToJSON (Core.PParams era)
+         , ToJSON (Shelley.PParamsDelta era)
          ) => ToJSON (Shelley.EpochState era) where
   toJSON eState = object [ "esAccountState" .= Shelley.esAccountState eState
                          , "esSnapshots" .= Shelley.esSnapshots eState
@@ -79,6 +83,7 @@ instance ( Consensus.ShelleyBasedEra era
 
 instance ( Consensus.ShelleyBasedEra era
          , ToJSON (Core.TxOut era)
+         , ToJSON (Shelley.PParamsDelta era)
          ) => ToJSON (Shelley.LedgerState era) where
   toJSON lState = object [ "utxoState" .= Shelley._utxoState lState
                          , "delegationState" .= Shelley._delegationState lState
@@ -86,6 +91,7 @@ instance ( Consensus.ShelleyBasedEra era
 
 instance ( Consensus.ShelleyBasedEra era
          , ToJSON (Core.TxOut era)
+         , ToJSON (Shelley.PParamsDelta era)
          ) => ToJSON (Shelley.UTxOState era) where
   toJSON utxoState = object [ "utxo" .= Shelley._utxo utxoState
                             , "deposited" .= Shelley._deposited utxoState
@@ -93,12 +99,16 @@ instance ( Consensus.ShelleyBasedEra era
                             , "ppups" .= Shelley._ppups utxoState
                             ]
 
-instance ToJSON (Shelley.PPUPState era) where
+instance ( ToJSON (Shelley.PParamsDelta era)
+         , Shelley.UsesPParams era
+         ) => ToJSON (Shelley.PPUPState era) where
   toJSON ppUpState = object [ "proposals" .= Shelley.proposals ppUpState
                             , "futureProposals" .= Shelley.futureProposals ppUpState
                             ]
 
-instance ToJSON (Shelley.ProposedPPUpdates era) where
+instance ( ToJSON (Shelley.PParamsDelta era)
+         , Shelley.UsesPParams era
+         ) => ToJSON (Shelley.ProposedPPUpdates era) where
   toJSON (Shelley.ProposedPPUpdates ppUpdates) = toJSON $ Map.toList ppUpdates
 
 instance ToJSON (Shelley.PParams' StrictMaybe era) where
@@ -191,7 +201,7 @@ instance Crypto.Crypto crypto => ToJSONKey (Shelley.TxIn crypto) where
 
 txInToText :: Crypto.Crypto crypto => Shelley.TxIn crypto -> Text
 txInToText (Shelley.TxIn (Shelley.TxId txidHash) ix) =
-  hashToText txidHash
+  hashToText (SafeHash.extractHash txidHash)
     <> Text.pack "#"
     <> Text.pack (show ix)
 
@@ -242,4 +252,18 @@ instance ToJSON (Shelley.IndividualPoolStake crypto) where
     object [ "individualPoolStake" .= Shelley.individualPoolStake indivPoolStake
            , "individualPoolStakeVrf" .= Shelley.individualPoolStakeVrf indivPoolStake
            ]
+
+instance ToJSON (Shelley.Reward crypto) where
+  toJSON reward =
+     object [ "rewardType" .= Shelley.rewardType reward
+            , "rewardPool" .= Shelley.rewardPool reward
+            , "rewardAmount" .= Shelley.rewardAmount reward
+            ]
+
+instance ToJSON Shelley.RewardType where
+  toJSON Shelley.MemberReward = "MemberReward"
+  toJSON Shelley.LeaderReward = "LeaderReward"
+
+instance ToJSON (SafeHash.SafeHash c a) where
+  toJSON = toJSON . SafeHash.extractHash
 
